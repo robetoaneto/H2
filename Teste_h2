@@ -1,0 +1,208 @@
+1. Usando SQL para responder perguntas
+
+Você encontrará as duas tabelas necessárias nesta pasta. Segue uma breve descrição de cada coluna: 
+
+Tabela resultado:
+Data_acesso: o dia que o jogador realizou as ações.
+Clientes_id: o id do cliente, essa coluna pode ser usada para buscar as informações da 
+tabela clientes.
+Buyin: o valor total apostado pelo jogador.
+Winning: o valor total ganho pelo jogador, quando negativo, o prejuízo total do jogador.
+Rake: o lucro da empresa com esse jogador.
+ 
+Tabela clientes:
+Id: o id do cliente, pode ser cruzado com a informação de clientes_id na tabela resultado.
+Sexo: sexo do jogador, sendo m=mascluno e f=feminino.
+Data_nascimento: ano, mês e dia de nascimento do jogador.
+Data_cadastro: data e hora de quando o jogador realizou cadastro.
+Cidade: cidade onde mora o jogador.
+Sigla: UF onde mora o jogador.
+
+
+Considerando essas tabelas, responda o código em SQL que responde às seguintes perguntas:
+
+
+Quanto de rake foi gerado por cada Geração* de jogadores?
+Qual foi o rake gerado por mês? 
+Qual sexo tem uma maior proporção de ganhadores**?
+
+
+1.A - SELECT CASE
+        WHEN substring(a.data_nascimento,1,4) BETWEEN '1925' AND '1940' THEN 'Veteranos'
+        WHEN substring(a.data_nascimento,1,4) BETWEEN '1941' AND '1959' THEN 'Baby_Boomers'
+        WHEN substring(a.data_nascimento,1,4) BETWEEN '1960' AND '1979' THEN 'Geracao_x'
+        WHEN substring(a.data_nascimento,1,4) BETWEEN '1980' AND '1995' THEN 'Geracao_y'
+        WHEN substring(a.data_nascimento,1,4) BETWEEN '1996' AND '2010' THEN 'Geracao_z'
+        ELSE 'geracao_alpha'
+END AS ds_geracao
+,SUM(b.rake) AS rake_total
+
+FROM clientes AS a
+
+LEFT JOIN resultado AS b
+ON trim(a.id) = trim(b.clientes_id)
+
+GROUP BY ds_geracao
+
+ORDER BY rake_total;
+------------------------------------------------------------------------------------------
+
+1.B - SELECT substring(data_acesso,1,7) AS anomes_geracao
+,SUM(rake) AS rake_total
+
+FROM resultado
+
+GROUP BY anomes_geracao
+
+ORDER BY anomes_geracao;
+-----------------------------------------------------------------------------------------
+
+1.C - SELECT tabela_1.sexo_cliente AS sexo_cliente
+,COUNT(DISTINCT tabela_1.id_cliente) AS qntd_clientes
+,SUM(tabela_1.winning_points) AS winning_points
+
+FROM (
+
+    SELECT a.sexo AS sexo_cliente
+    ,SUM(b.winning) AS winning_points
+    ,a.id AS id_cliente
+
+    FROM clientes AS a
+
+    LEFT JOIN resultado AS b
+    ON trim(a.id) = trim(b.clientes_id)
+
+    GROUP BY sexo_cliente
+    ,id_cliente
+
+) AS tabela_1
+
+WHERE tabela_1.winning_points > 0.00
+
+GROUP BY sexo_cliente
+
+ORDER BY winning_points;
+-----------------------------------------------------------------------------------------
+
+2.Escreva um script em Python que lê os dados de uma tabela num banco MySQL, consolida os dados e salva numa outra tabela de um banco local MySQL. Para a tarefa de read, iremos passar o acesso a um banco de dados. Para o write, queremos que você suba um banco localmente para testar o script.
+
+Acesso ao banco de dados:
+
+Banco: a4f2b49a_sample_database
+Host:40b8f30251.nxcli.io
+User: a4f2b49a_padawan
+Password: KaratFlanksUgliedSpinal
+Port: 3306
+
+#Resposta
+
+db_connection = mysql.connector.connect(
+    host='40b8f30251.nxcli.io',
+    user='a4f2b49a_padawan',
+    password='KaratFlanksUgliedSpinal',
+    database='a4f2b49a_sample_database'
+)
+
+query = ("""
+
+    --CREATE TABLE IF NOT EXISTS tabela_consolidada AS 
+
+    SELECT substring(data_hora_acesso,1,4) AS anomes_referencia
+    ,SUM(rake) AS vlr_rake
+    ,COUNT(DISTINCT clientes_id) AS qntd_jogadores
+    ,SUM(IF(modalidade = 'Cash_Game', rake, 0.00)) AS vlr_rake_cash_game
+    ,SUM(IF(modalidade = 'Torneio', rake, 0.00)) AS vlr_rake_torneio
+    ,IF(modalidade = 'Cash_Game', COUNT(DISTINCT clientes_id), 0)) AS qntd_jogadores_cash_game
+    ,IF(modalidade = 'Torneio', COUNT(DISTINCT clientes_id), 0)) AS qntd_jogadores_torneio
+
+    FROM raw_data
+
+    GROUP BY anomes_referencia
+    ,modalidade
+    ,rake
+
+    ORDER BY anomes_referencia
+
+""")
+
+#Para ver os resultados:
+resultado_query1 = pd.read_sql_query(query, conexao, index_col=False)
+
+print(resultado_query1)
+-----------------------------------------------------------------------------------------
+3.Para essa atividade queremos que você utilize essa API. Nela você encontrará resultados de partidas de diversos esportes. Queremos que você utilize o endpoint de scores para buscar determinadas informações do sport soccer_epl na resposta da API e salvar numa tabela chamada matchs_epl contendo as seguintes colunas:
+
+datahora_partida
+data_partida
+time_casa
+time_fora
+gols_time_casa
+gols_time_fora
+
+#Resposta
+
+import requests
+import mysql.connector
+
+# Endpoint da API
+url = 'https://odds.p.rapidapi.com/v4/sports/soccer_epl'
+
+params = {
+    'all': 'true'
+}
+
+headers = {
+    'X-RapidAPI-Key': 'b19ba37307msh13bda856bf072ebp13595fjsnd9688ddae1d1',
+    'X-RapidAPI-Host': 'odds.p.rapidapi.com'
+}
+
+# Conectando ao banco de dados MySQL
+db_connection = mysql.connector.connect(
+    host='localhost',
+    user='root',
+    password='528594',
+    database='db_livesorts'
+)
+
+# Cursor para executar queries SQL
+cursor = db_connection.cursor()
+
+# Criar tabela matchs_epl, se ainda não existir
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS matchs_epl (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        datahora_partida DATETIME,
+        data_partida DATE,
+        time_casa VARCHAR(255),
+        time_fora VARCHAR(255),
+        gols_time_casa INT,
+        gols_time_fora INT
+    )
+""")
+
+# Obter dados da API
+response = requests.get(url, params=params, headers=headers)
+matches = response.json()['matches']
+
+
+for match in matches:
+    datahora_partida = match['datahora_partida']
+    data_partida = match['data_partida']
+    time_casa = match['time_casa']
+    time_fora = match['time_fora']
+    gols_time_casa = match['gols_time_casa']
+    gols_time_fora = match['gols_time_fora']
+    
+
+    cursor.execute("""
+        INSERT INTO matchs_epl
+        (datahora_partida, data_partida, time_casa, time_fora, gols_time_casa, gols_time_fora)
+        VALUES (%s, %s, %s, %s, %s, %s)
+    """, (datahora_partida, data_partida, time_casa, time_fora, gols_time_casa, gols_time_fora))
+
+
+db_connection.commit()
+
+# Fechar conexão com o banco de dados
+cursor.close()
+db_connection.close()
